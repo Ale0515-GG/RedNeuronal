@@ -3,15 +3,15 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.feature_extraction.text import TfidfVectorizer
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense
+from sklearn.metrics import classification_report
+from scipy.sparse import hstack
 
 # Paso 1: Cargar datos
 print("Cargando datos...")
 df = pd.read_csv("comidas.csv", encoding="latin1")
-
-print("Primeras filas del dataset:")
-print(df.head())
 
 # Paso 2: Codificar variables categóricas
 le_tipo = LabelEncoder()
@@ -21,39 +21,52 @@ le_etiqueta = LabelEncoder()
 df['etiqueta_encoded'] = le_etiqueta.fit_transform(df['etiqueta'])
 etiqueta_clases = le_etiqueta.classes_
 
-# Crear un diccionario para saber qué etiquetas son saludables o no
-# Aquí asumo que cualquier etiqueta que NO sea "no saludable" es saludable
-etiqueta_saludable_map = {et: (et != 'no saludable') for et in etiqueta_clases}
+print("Clases encontradas:", etiqueta_clases)
+print("Cantidad de clases:", len(etiqueta_clases))
+print("\nDistribución de clases:")
+print(df['etiqueta'].value_counts(normalize=True))
 
-# Paso 3: Preparar variables para modelo multiclasificación (solo etiquetas)
-X = df[["calorias", "proteinas", "grasas", "carbohidratos", "tiempo_min", "tipo_preparacion"]]
-y = df["etiqueta_encoded"]  # etiquetas nutricionales
+# Paso 3: Preparar variables
+X_num = df[["calorias", "proteinas", "grasas", "carbohidratos", "tiempo_min", "tipo_preparacion"]]
+y = df["etiqueta_encoded"]
 
-# Paso 4: División de datos en entrenamiento y prueba
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.2, random_state=42)
+# TF-IDF sobre ingredientes
+vectorizer = TfidfVectorizer()
+X_ing = vectorizer.fit_transform(df["ingredientes"])
 
-# Paso 5: Escalado (ajustado solo con entrenamiento)
-scaler = StandardScaler()
-X_train_scaled = scaler.fit_transform(X_train)
-X_test_scaled = scaler.transform(X_test)
+# Concatenar numéricos + TF-IDF (sparse matrix)
+X_full = hstack([X_num, X_ing])
 
-# Paso 6: Modelo multiclasificación para predecir etiqueta
+# Paso 4: División de datos
+X_train, X_test, y_train, y_test = train_test_split(X_full, y, test_size=0.2, random_state=42)
+
+# Paso 5: Escalado solo para variables numéricas
+scaler = StandardScaler(with_mean=False)  # with_mean=False porque estamos usando sparse matrices
+X_train = scaler.fit_transform(X_train)
+X_test = scaler.transform(X_test)
+
+# Paso 6: Modelo
 model = Sequential([
-    Dense(64, activation='relu', input_shape=(X_train_scaled.shape[1],)),
-    Dense(32, activation='relu'),
+    Dense(128, activation='relu', input_shape=(X_train.shape[1],)),
+    Dense(64, activation='relu'),
     Dense(len(etiqueta_clases), activation='softmax')
 ])
 model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
 
 print("\nEntrenando modelo de etiquetas nutricionales...")
-history = model.fit(X_train_scaled, y_train, epochs=30, batch_size=16, validation_split=0.2)
+history = model.fit(X_train.toarray(), y_train, epochs=30, batch_size=16, validation_split=0.2)
 
-# Evaluación modelo
-loss, acc = model.evaluate(X_test_scaled, y_test)
-print(f"\n✅ Precisión del modelo en datos de prueba: {acc*100:.2f}%")
+# Evaluación
+loss, acc = model.evaluate(X_test.toarray(), y_test)
+print(f"\n✅ Precisión del modelo en test: {acc*100:.2f}%")
 
-# Paso 7: Graficar precisión durante el entrenamiento
+# Reporte de clasificación
+from sklearn.metrics import classification_report
+y_pred = np.argmax(model.predict(X_test.toarray()), axis=1)
+print("\n📊 Reporte de clasificación:")
+print(classification_report(y_test, y_pred, target_names=etiqueta_clases))
+
+# Gráfico
 plt.figure(figsize=(10,6))
 plt.plot(history.history['accuracy'], label='Entrenamiento')
 plt.plot(history.history['val_accuracy'], label='Validación')
@@ -66,7 +79,7 @@ plt.grid(True)
 plt.tight_layout()
 plt.show()
 
-# Paso 8: Entrada manual y predicción
+# Entrada manual
 print("\n📥 Ingresa los datos de tu receta para predecir su etiqueta nutricional:")
 
 try:
@@ -76,23 +89,31 @@ try:
     carbohidratos = float(input("Carbohidratos: "))
     tiempo_min = float(input("Tiempo de preparación (minutos): "))
     tipo_txt = input("Tipo de preparación (rápido/elaborado): ").strip().lower()
+    ingredientes_txt = input("Lista de ingredientes (separados por coma): ")
 
     if tipo_txt not in le_tipo.classes_:
         raise ValueError("Tipo inválido. Usa 'rápido' o 'elaborado'.")
 
     tipo_encoded = le_tipo.transform([tipo_txt])[0]
 
-    # Crear array con la nueva receta
-    nueva_receta = np.array([[calorias, proteinas, grasas, carbohidratos, tiempo_min, tipo_encoded]])
-    nueva_receta_scaled = scaler.transform(nueva_receta)
+    # Datos numéricos
+    datos_numericos = np.array([[calorias, proteinas, grasas, carbohidratos, tiempo_min, tipo_encoded]])
 
-    # Predicción etiqueta
-    pred_prob = model.predict(nueva_receta_scaled)
+    # Procesar ingredientes
+    datos_ingredientes = vectorizer.transform([ingredientes_txt])
+
+    # Concatenar
+    entrada_completa = hstack([datos_numericos, datos_ingredientes])
+    entrada_completa = scaler.transform(entrada_completa)
+
+    # Predicción
+    pred_prob = model.predict(entrada_completa.toarray())
     etiqueta_index = np.argmax(pred_prob)
     etiqueta_nombre = etiqueta_clases[etiqueta_index]
     prob_etiqueta = pred_prob[0][etiqueta_index]
 
-    # Saber si saludable o no según etiqueta
+    # Clasificación saludable o no
+    etiqueta_saludable_map = {et: (et != 'no saludable') for et in etiqueta_clases}
     es_saludable = etiqueta_saludable_map[etiqueta_nombre]
     texto_saludable = "✅ Saludable" if es_saludable else "❌ No saludable"
 
