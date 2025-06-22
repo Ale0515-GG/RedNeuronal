@@ -1,4 +1,4 @@
-# Paso 1: Importamos las librerías necesarias
+# Paso 1: Importar librerías necesarias
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -6,88 +6,130 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, classification_report
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, Embedding
+from tensorflow.keras.layers import Dense
 
 # Paso 2: Cargar el archivo CSV
 print("Cargando datos...")
-df = pd.read_csv("comidas.csv", encoding="latin1")  # usamos 'latin1' para evitar errores de acentos
+df = pd.read_csv("comidas.csv", encoding="latin1")
 
-# Paso 3: Visualizamos las primeras filas del dataset
+# Paso 3: Visualizar las primeras filas del dataset
 print("Primeras filas del dataset:")
 print(df.head())
 
-# Paso 4: Verificamos las columnas disponibles
-print("\nColumnas disponibles:")
-print(df.columns)
-
-# Paso 5: Convertimos la columna 'tipo_preparacion' (rápido/elaborado) en valores numéricos
+# Paso 4: Preprocesar los datos
 le_tipo = LabelEncoder()
-df['tipo_preparacion'] = le_tipo.fit_transform(df['tipo_preparacion'])
+df['tipo_preparacion'] = le_tipo.fit_transform(df['tipo_preparacion'])  # rápido/elaborado → 0/1
 
-# Paso 6: Definimos variables predictoras (X) y variable objetivo (y)
-# Excluimos columnas de texto irrelevantes para la red neuronal
-X = df.drop(columns=["id", "nombre_receta", "ingredientes", "etiqueta", "saludable"])
-y = df["saludable"]
+le_etiqueta = LabelEncoder()
+df['etiqueta_encoded'] = le_etiqueta.fit_transform(df['etiqueta'])  # texto → número
 
-# Paso 7: Escalamos los datos para mejorar el rendimiento de la red neuronal
+# Guardar las clases para luego mostrar el nombre correcto de la etiqueta
+etiqueta_clases = le_etiqueta.classes_
+
+# Paso 5: Variables para modelo 1 (saludable)
+X1 = df.drop(columns=["id", "nombre_receta", "ingredientes", "etiqueta", "saludable", "etiqueta_encoded"])
+y1 = df["saludable"]
+
+# Paso 6: Variables para modelo 2 (etiqueta)
+X2 = X1.copy()
+y2 = df["etiqueta_encoded"]
+
+# Paso 7: Escalado de datos para mejor rendimiento
 scaler = StandardScaler()
-X_scaled = scaler.fit_transform(X)
+X1_scaled = scaler.fit_transform(X1)
+X2_scaled = scaler.transform(X2)  # usamos el mismo scaler
 
-# Paso 8: Dividimos el conjunto de datos en entrenamiento y prueba
-X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
+# Paso 8: División de los datos en entrenamiento y prueba
+X1_train, X1_test, y1_train, y1_test = train_test_split(X1_scaled, y1, test_size=0.2, random_state=42)
+X2_train, X2_test, y2_train, y2_test = train_test_split(X2_scaled, y2, test_size=0.2, random_state=42)
 
-# Paso 9: Definimos la arquitectura de la red neuronal
-model = Sequential()
-model.add(Dense(64, input_dim=X_train.shape[1], activation='relu'))  # Capa oculta con 64 neuronas
-model.add(Dense(32, activation='relu'))  # Otra capa oculta con 32 neuronas
-model.add(Dense(1, activation='sigmoid'))  # Capa de salida binaria (0 o 1)
+# Paso 9: Crear y entrenar el modelo 1 (Saludabilidad)
+model1 = Sequential()
+model1.add(Dense(64, input_dim=X1_train.shape[1], activation='relu'))
+model1.add(Dense(32, activation='relu'))
+model1.add(Dense(1, activation='sigmoid'))  # salida binaria
 
-# Paso 10: Compilamos el modelo
-model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
+model1.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
 
-# Paso 11: Entrenamos el modelo
-print("\nEntrenando el modelo...")
-history = model.fit(X_train, y_train, epochs=20, batch_size=16, validation_split=0.2)
+print("\nEntrenando modelo de saludabilidad...")
+history1 = model1.fit(X1_train, y1_train, epochs=20, batch_size=16, validation_split=0.2)
 
-# Paso 12: Evaluamos el modelo en el conjunto de prueba
-print("\nEvaluando en datos de prueba:")
-loss, accuracy = model.evaluate(X_test, y_test)
-print(f"Precisión en datos de prueba: {accuracy:.2f}")
+# Evaluar modelo 1
+loss1, accuracy1 = model1.evaluate(X1_test, y1_test)
+print(f"✅ Precisión del modelo de saludabilidad: {accuracy1*100:.2f}%")
 
-# Paso 13: Graficamos el historial de entrenamiento
-plt.plot(history.history['accuracy'], label='Entrenamiento')
-plt.plot(history.history['val_accuracy'], label='Validación')
-plt.xlabel('Época')
+# Paso 10: Graficar desempeño del modelo 1
+plt.figure(figsize=(8, 4))
+plt.plot(history1.history['accuracy'], label='Entrenamiento')
+plt.plot(history1.history['val_accuracy'], label='Validación')
+plt.title('Precisión del modelo de saludabilidad')
+plt.xlabel('Épocas')
 plt.ylabel('Precisión')
 plt.legend()
-plt.title('Precisión durante el entrenamiento')
+plt.grid(True)
+plt.tight_layout()
 plt.show()
 
-# Paso 14: Hacemos predicciones con los datos de prueba
-y_pred_prob = model.predict(X_test)  # Predicciones como probabilidad (entre 0 y 1)
-y_pred = (y_pred_prob > 0.5).astype(int)  # Convertimos a 0 o 1 (umbral 0.5)
+# Paso 11: Crear y entrenar el modelo 2 (Etiqueta)
+model2 = Sequential()
+model2.add(Dense(64, input_dim=X2_train.shape[1], activation='relu'))
+model2.add(Dense(32, activation='relu'))
+model2.add(Dense(len(etiqueta_clases), activation='softmax'))  # salida multiclase
 
-# Paso 15: Mostramos algunas predicciones reales vs predichas
-print("\nEjemplos de predicciones:")
-for real, pred in zip(y_test[:10], y_pred[:10]):
-    print(f"Real: {real} - Predicho: {int(pred)}")
+model2.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
 
-# Paso 16: Matriz de confusión
-cm = confusion_matrix(y_test, y_pred)
-disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=["No saludable", "Saludable"])
-disp.plot(cmap='Blues')
-plt.title("Matriz de Confusión")
+print("\nEntrenando modelo de etiquetas...")
+history2 = model2.fit(X2_train, y2_train, epochs=20, batch_size=16, validation_split=0.2)
+
+# Evaluar modelo 2
+loss2, accuracy2 = model2.evaluate(X2_test, y2_test)
+print(f"✅ Precisión del modelo de etiquetas: {accuracy2*100:.2f}%")
+
+# Paso 12: Graficar precisión de ambos modelos para comparar
+plt.figure(figsize=(6, 5))
+plt.bar(["Saludable", "Etiqueta"], [accuracy1*100, accuracy2*100], color=["#4CAF50", "#2196F3"])
+plt.title("Comparación de precisión de los modelos")
+plt.ylabel("Precisión (%)")
+plt.ylim(0, 100)
+for i, val in enumerate([accuracy1*100, accuracy2*100]):
+    plt.text(i, val + 2, f"{val:.2f}%", ha='center', fontsize=12)
+plt.tight_layout()
 plt.show()
 
-# Paso 17: Reporte de métricas de clasificación
-print("\nReporte de clasificación:")
-print(classification_report(y_test, y_pred, target_names=["No saludable", "Saludable"]))
+# Paso 13: Ingreso de nueva receta por el usuario
+print("\n📥 Ingresa una receta para predecir:")
 
-# Paso 18: Conclusión automática en base a la precisión
-print("\nConclusión automática basada en la precisión:")
-if accuracy >= 0.90:
-    print("El modelo tiene una precisión **alta**. Puede identificar comidas saludables de forma confiable.")
-elif accuracy >= 0.80:
-    print("El modelo tiene un buen rendimiento general, aunque puede mejorar con más datos o ajuste de parámetros.")
-else:
-    print("El modelo necesita mejoras. Puede requerir más datos, limpieza o una red neuronal más profunda.")
+try:
+    calorias = float(input("Calorías: "))
+    proteinas = float(input("Proteínas: "))
+    grasas = float(input("Grasas: "))
+    carbohidratos = float(input("Carbohidratos: "))
+    tiempo_min = float(input("Tiempo de preparación (minutos): "))
+    tipo_preparacion_txt = input("Tipo de preparación (rápido/elaborado): ").strip().lower()
+
+    # Validar entrada
+    if tipo_preparacion_txt not in le_tipo.classes_:
+        raise ValueError("Tipo de preparación inválido. Usa 'rápido' o 'elaborado'.")
+
+    tipo_preparacion = le_tipo.transform([tipo_preparacion_txt])[0]
+
+    # Construir arreglo con los datos
+    nueva_receta = np.array([[calorias, proteinas, grasas, carbohidratos, tiempo_min, tipo_preparacion]])
+    nueva_receta_scaled = scaler.transform(nueva_receta)
+
+    # Modelo 1: ¿Es saludable?
+    prob_saludable = model1.predict(nueva_receta_scaled)[0][0]
+    resultado_saludable = "Saludable" if prob_saludable > 0.5 else "No saludable"
+
+    # Modelo 2: ¿Qué etiqueta nutricional tiene?
+    etiqueta_pred = model2.predict(nueva_receta_scaled)
+    etiqueta_index = np.argmax(etiqueta_pred)
+    etiqueta_nombre = etiqueta_clases[etiqueta_index]
+
+    # Mostrar resultado
+    print(f"\n🔍 Resultado de la predicción:")
+    print(f"Probabilidad de ser saludable: {prob_saludable*100:.2f}% → {resultado_saludable}")
+    print(f"Etiqueta nutricional predicha: {etiqueta_nombre}")
+
+except Exception as e:
+    print(f"❌ Error al ingresar los datos: {e}")
