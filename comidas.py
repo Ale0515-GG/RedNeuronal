@@ -59,16 +59,16 @@ model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=
 early_stop = EarlyStopping(monitor='val_loss', patience=3, restore_best_weights=True)
 
 print("\nEntrenando modelo de etiquetas nutricionales...")
-history = model.fit(X_train.toarray(), y_train, epochs=10, batch_size=16, validation_split=0.2)
+history = model.fit(X_train.toarray(), y_train, epochs=30, batch_size=16, validation_split=0.2)
 
 # Evaluación
 loss, acc = model.evaluate(X_test.toarray(), y_test)
-print(f"\n✅ Precisión del modelo en test: {acc*100:.2f}%")
+print(f"\n Precisión del modelo en test: {acc*100:.2f}%")
 
 # Reporte de clasificación
 from sklearn.metrics import classification_report
 y_pred = np.argmax(model.predict(X_test.toarray()), axis=1)
-print("\n📊 Reporte de clasificación:")
+print("\n  Reporte de clasificación:")
 print(classification_report(y_test, y_pred, target_names=etiqueta_clases))
 
 # Gráfico
@@ -85,7 +85,7 @@ plt.tight_layout()
 plt.show()
 
 # Entrada manual
-print("\n📥 Ingresa los datos de tu receta para predecir su etiqueta nutricional:")
+print("\n Ingresa los datos de tu receta para predecir su etiqueta nutricional:")
 
 try:
     calorias = float(input("Calorías: "))
@@ -120,11 +120,11 @@ try:
     # Clasificación saludable o no
     etiqueta_saludable_map = {et: (et != 'no saludable') for et in etiqueta_clases}
     es_saludable = etiqueta_saludable_map[etiqueta_nombre]
-    texto_saludable = "✅ Saludable" if es_saludable else "❌ No saludable"
+    texto_saludable = "Saludable" if es_saludable else "No saludable"
 
-    print("\n🔍 Resultado de la predicción:")
-    print(f"🏷️ Etiqueta nutricional predicha: {etiqueta_nombre} (confianza: {prob_etiqueta*100:.2f}%)")
-    print(f"🧠 Clasificación general: {texto_saludable}")
+    print("\n Resultado de la predicción:")
+    print(f"Etiqueta nutricional predicha: {etiqueta_nombre} (confianza: {prob_etiqueta*100:.2f}%)")
+    print(f"Clasificación general: {texto_saludable}")
 
 except Exception as e:
-    print(f"❌ Error al ingresar datos: {e}")
+    print(f"Error al ingresar datos: {e}")
