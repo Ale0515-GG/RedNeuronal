@@ -59,7 +59,7 @@ model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=
 early_stop = EarlyStopping(monitor='val_loss', patience=3, restore_best_weights=True)
 
 print("\nEntrenando modelo de etiquetas nutricionales...")
-history = model.fit(X_train.toarray(), y_train, epochs=30, batch_size=16, validation_split=0.2)
+history = model.fit(X_train.toarray(), y_train, epochs=10, batch_size=16, validation_split=0.2)
 
 # Evaluación
 loss, acc = model.evaluate(X_test.toarray(), y_test)
