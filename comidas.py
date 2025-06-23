@@ -47,14 +47,14 @@ X_test = scaler.transform(X_test)
 
 # Paso 6: Modelo
 model = Sequential([
-    Dense(128, activation='relu', input_shape=(X_train.shape[1],)),
-    Dense(64, activation='relu'),
+    Dense(64, activation='relu', input_shape=(X_train.shape[1],)),
+    Dense(32, activation='relu'),
     Dense(len(etiqueta_clases), activation='softmax')
 ])
 model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
 
 print("\nEntrenando modelo de etiquetas nutricionales...")
-history = model.fit(X_train.toarray(), y_train, epochs=30, batch_size=16, validation_split=0.2)
+history = model.fit(X_train.toarray(), y_train, epochs=5, batch_size=16, validation_split=0.2)
 
 # Evaluación
 loss, acc = model.evaluate(X_test.toarray(), y_test)
